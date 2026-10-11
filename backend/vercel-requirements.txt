@@ -1,0 +1,14 @@
+fastapi>=0.115.0
+python-multipart>=0.0.9
+pydantic>=2.9.0
+pydantic-settings>=2.4.0
+sqlalchemy>=2.0.30
+aiosqlite>=0.20.0
+greenlet>=3.0.0
+torch
+torchvision
+scikit-learn
+Pillow
+numpy
+opencv-python-headless>=4.10.0
+python-dotenv>=1.0.0

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build",
+  "functions": {
+    "index.py": {
+      "maxDuration": 60,
+      "includeFiles": "backend/data/checkpoints/resnet18_647c05a4_best.pth"
+    }
+  }
+}
