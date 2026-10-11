@@ -12,6 +12,7 @@ venv/
 frontend/node_modules/
 frontend/dist/
 .vercel/
+supabase/.temp/
 test_data/
 backend/test_data/
 backend/data/**
