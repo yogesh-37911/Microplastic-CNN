@@ -1,0 +1,12 @@
+.env
+.pytest_cache
+__pycache__
+*.py[cod]
+test_data
+data/datasets
+data/models
+data/reports
+data/uploads
+data/*.db
+data/checkpoints/*.pth
+!data/checkpoints/resnet18_647c05a4_best.pth

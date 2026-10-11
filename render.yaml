@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: microplastic-vision-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DEMO_MODE
+        value: "false"
+      - key: CORS_ORIGINS
+        value: https://frontend-tawny-zeta-17.vercel.app
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        value: https://qzpfgdoibzraobyeugrw.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: analysis-images

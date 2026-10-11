@@ -120,6 +120,8 @@ Open your browser at:
 
 The React frontend is deployed from `frontend/` as a static Vercel project. The FastAPI/PyTorch backend is not deployed there because Vercel's serverless function bundle limit is smaller than the PyTorch runtime. Supabase is configured for persistent PostgreSQL records and private image storage; it does not run this PyTorch inference service.
 
+The Render Blueprint at `render.yaml` deploys the Python API from `backend/Dockerfile` in Singapore and includes the selected ResNet18 checkpoint. It uses Render's free compute plan by default; free services can sleep when idle and have 512 MB RAM. This model process used about 420 MB in the local environment, so the free plan may run close to its memory limit. Render's 2 GB plan is $25/month if the free instance runs out of memory.
+
 For a backend host that can run the Python dependencies, configure these server-side environment variables:
 
 - `DATABASE_URL`: the Supabase PostgreSQL connection string. The backend supports `postgresql://` URLs and enforces TLS.
@@ -127,6 +129,8 @@ For a backend host that can run the Python dependencies, configure these server-
 - `SUPABASE_SECRET_KEY`: the Supabase secret key, stored only on the backend host.
 - `SUPABASE_STORAGE_BUCKET=analysis-images`
 - `CORS_ORIGINS`: include the Vercel frontend origin.
+
+Create the Render service from the repository's Blueprint and enter `DATABASE_URL` and `SUPABASE_SECRET_KEY` as Render secrets. Keep both values out of Git and out of the browser.
 
 Set `VITE_API_URL` in the Vercel frontend project to the deployed FastAPI base URL, then redeploy the frontend. Do not put the Supabase secret key in any `VITE_` variable. Supabase tables and the private `analysis-images` bucket are defined in `supabase/migrations/`.
 
