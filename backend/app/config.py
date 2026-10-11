@@ -34,6 +34,12 @@ class Settings(BaseSettings):
         if _IS_VERCEL else "sqlite+aiosqlite:///./data/microplastic_vision.db"
     )
 
+    # Optional Supabase Postgres and private Storage bucket. The secret key is
+    # backend-only and must never be exposed to the Vite client.
+    supabase_url: str = ""
+    supabase_secret_key: str = ""
+    supabase_storage_bucket: str = "analysis-images"
+
     # ── Storage ──────────────────────────────────────────────────
     upload_dir: str = "/tmp/microplastic_vision/uploads" if _IS_VERCEL else "data/uploads"
     dataset_dir: str = "/tmp/microplastic_vision/datasets" if _IS_VERCEL else "data/datasets"

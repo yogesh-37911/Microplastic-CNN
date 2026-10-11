@@ -31,7 +31,7 @@ class Analysis(Base):
     __tablename__ = "analyses"
 
     id = Column(String, primary_key=True, default=_uuid)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     # Image metadata
     original_filename = Column(String, nullable=False)
@@ -89,8 +89,8 @@ class TrainingRun(Base):
     __tablename__ = "training_runs"
 
     id = Column(String, primary_key=True, default=_uuid)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
-    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False)
 
     # Run metadata
     run_name = Column(String, nullable=False)
@@ -167,7 +167,7 @@ class Evaluation(Base):
     __tablename__ = "evaluations"
 
     id = Column(String, primary_key=True, default=_uuid)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     run_id = Column(String, ForeignKey("training_runs.id"), nullable=False)
     run = relationship("TrainingRun", back_populates="evaluations")
@@ -228,7 +228,7 @@ class DatasetManifest(Base):
     __tablename__ = "dataset_manifests"
 
     id = Column(String, primary_key=True, default=_uuid)
-    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)

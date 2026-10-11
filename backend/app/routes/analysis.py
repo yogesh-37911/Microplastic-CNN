@@ -5,12 +5,14 @@ Microplastic Vision – image analysis routes.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query
+from fastapi.responses import Response
 from PIL import Image
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +23,7 @@ from app.models import Analysis
 from app.schemas import AnalysisResponse, AnalysisListResponse, BatchAnalysisResponse
 from app.ml.inference import get_inference_service
 from app.ml.detector import detect as yolo_detect, is_yolo_available
+from app.storage import upload_image, download_image, delete_image, is_supabase_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["analysis"])
@@ -42,8 +45,8 @@ def _validate_upload(file: UploadFile) -> None:
         )
 
 
-async def _save_upload(file: UploadFile) -> tuple[str, str]:
-    """Save uploaded file with generated name.  Returns (storage_path, file_type)."""
+async def _save_upload(file: UploadFile) -> tuple[str, str, str]:
+    """Store an upload and return (persistent path, type, local inference path)."""
     settings = get_settings()
     ext = Path(file.filename).suffix.lower()
     storage_name = f"{uuid.uuid4().hex}{ext}"
@@ -58,7 +61,19 @@ async def _save_upload(file: UploadFile) -> tuple[str, str]:
         )
 
     storage_path.write_bytes(content)
-    return str(storage_path), ext.lstrip(".")
+    if settings.supabase_url and settings.supabase_secret_key:
+        try:
+            persistent_path = await upload_image(
+                storage_name,
+                content,
+                file.content_type or mimetypes.guess_type(storage_name)[0] or "application/octet-stream",
+            )
+        except Exception as exc:
+            storage_path.unlink(missing_ok=True)
+            logger.exception("Could not store image in Supabase Storage")
+            raise HTTPException(status_code=502, detail="Image storage is temporarily unavailable.") from exc
+        return persistent_path, ext.lstrip("."), str(storage_path)
+    return str(storage_path), ext.lstrip("."), str(storage_path)
 
 
 def _open_and_validate_image(storage_path: str) -> Image.Image:
@@ -77,23 +92,36 @@ def _open_and_validate_image(storage_path: str) -> Image.Image:
 async def _run_analysis(file: UploadFile, db: AsyncSession) -> Analysis:
     """Core analysis logic shared by single and batch endpoints."""
     _validate_upload(file)
-    storage_path, file_type = await _save_upload(file)
+    storage_path, file_type, local_path = await _save_upload(file)
 
-    img = _open_and_validate_image(storage_path)
-    w, h = img.size
+    remote_storage = is_supabase_path(storage_path)
+    try:
+        img = _open_and_validate_image(local_path)
+        w, h = img.size
 
-    # Run inference
-    service = get_inference_service()
-    result = service.predict(img)
+        # Run inference
+        service = get_inference_service()
+        result = service.predict(img)
 
-    # Optional YOLO
-    detections = None
-    detection_count = None
-    if is_yolo_available():
-        det_result = yolo_detect(img)
-        if det_result.get("available"):
-            detections = det_result.get("detections", [])
-            detection_count = det_result.get("count", 0)
+        # Optional YOLO
+        detections = None
+        detection_count = None
+        if is_yolo_available():
+            det_result = yolo_detect(img)
+            if det_result.get("available"):
+                detections = det_result.get("detections", [])
+                detection_count = det_result.get("count", 0)
+    except Exception:
+        if remote_storage:
+            try:
+                await delete_image(storage_path)
+            except Exception:
+                logger.exception("Could not clean up failed Supabase upload")
+            Path(local_path).unlink(missing_ok=True)
+        raise
+    finally:
+        if remote_storage:
+            Path(local_path).unlink(missing_ok=True)
 
     analysis = Analysis(
         id=str(uuid.uuid4()),
@@ -213,6 +241,16 @@ def _remove_upload_if_owned(storage_path: str) -> None:
             logger.warning("Could not remove analysis upload %s: %s", stored_path, exc)
 
 
+async def _delete_stored_upload(storage_path: str) -> None:
+    if is_supabase_path(storage_path):
+        try:
+            await delete_image(storage_path)
+        except Exception:
+            logger.exception("Could not remove image from Supabase Storage")
+        return
+    _remove_upload_if_owned(storage_path)
+
+
 @router.delete("/analyses/{analysis_id}")
 async def delete_analysis(analysis_id: str, db: AsyncSession = Depends(get_db)):
     """Delete one analysis and its unreferenced uploaded image."""
@@ -225,7 +263,7 @@ async def delete_analysis(analysis_id: str, db: AsyncSession = Depends(get_db)):
     await db.commit()
     remaining = await db.execute(select(func.count(Analysis.id)).where(Analysis.storage_path == storage_path))
     if (remaining.scalar() or 0) == 0:
-        _remove_upload_if_owned(storage_path)
+        await _delete_stored_upload(storage_path)
     return {"deleted": 1}
 
 
@@ -239,7 +277,7 @@ async def clear_analyses(db: AsyncSession = Depends(get_db)):
         await db.delete(analysis)
     await db.commit()
     for storage_path in storage_paths:
-        _remove_upload_if_owned(storage_path)
+        await _delete_stored_upload(storage_path)
     return {"deleted": len(analyses)}
 
 
@@ -247,13 +285,32 @@ async def clear_analyses(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/uploads/{filename}")
-async def serve_upload(filename: str):
+async def serve_upload(filename: str, db: AsyncSession = Depends(get_db)):
     """Serve an uploaded image file."""
     from fastapi.responses import FileResponse
 
     settings = get_settings()
     # Sanitize filename to prevent path traversal
     safe_name = Path(filename).name
+    # Supabase objects use UUID filenames; resolve them through the private
+    # bucket with the backend-only key so no storage secret reaches the browser.
+    if settings.supabase_url and settings.supabase_secret_key:
+        result = await db.execute(
+            select(Analysis.storage_path)
+            .where(Analysis.storage_path.endswith(f"/{safe_name}"))
+            .limit(1)
+        )
+        stored_path = result.scalar_one_or_none()
+        if not stored_path or not is_supabase_path(stored_path):
+            raise HTTPException(status_code=404, detail="File not found.")
+        try:
+            content = await download_image(stored_path)
+        except Exception as exc:
+            logger.exception("Could not read image from Supabase Storage")
+            raise HTTPException(status_code=502, detail="Image storage is temporarily unavailable.") from exc
+        media_type = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        return Response(content=content, media_type=media_type)
+
     file_path = Path(settings.upload_dir) / safe_name
 
     if not file_path.exists() or not file_path.is_file():

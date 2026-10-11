@@ -23,10 +23,17 @@ def _get_engine():
     global _engine
     if _engine is None:
         settings = get_settings()
+        database_url = settings.database_url
+        if database_url.startswith("postgres://"):
+            database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        connect_args = {"ssl": "require"} if "+asyncpg" in database_url and "localhost" not in database_url else {}
         _engine = create_async_engine(
-            settings.database_url,
+            database_url,
             echo=settings.debug,
             future=True,
+            connect_args=connect_args,
         )
     return _engine
 

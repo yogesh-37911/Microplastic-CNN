@@ -118,7 +118,19 @@ Open your browser at:
 
 ### Deploy on Vercel
 
-The repository root is configured to build the React frontend and serve it with the FastAPI backend. Deploy from the project root with `npx vercel --prod`. Vercel's function payload limit requires microscope image uploads to stay under 4 MB. The hosted SQLite database and uploaded files use temporary function storage, so analysis history and uploads are not durable across cold starts; use persistent database and object storage for ongoing research records. The selected ResNet18 checkpoint is included in local Vercel deployments and remains excluded from the source repository.
+The React frontend is deployed from `frontend/` as a static Vercel project. The FastAPI/PyTorch backend is not deployed there because Vercel's serverless function bundle limit is smaller than the PyTorch runtime. Supabase is configured for persistent PostgreSQL records and private image storage; it does not run this PyTorch inference service.
+
+For a backend host that can run the Python dependencies, configure these server-side environment variables:
+
+- `DATABASE_URL`: the Supabase PostgreSQL connection string. The backend supports `postgresql://` URLs and enforces TLS.
+- `SUPABASE_URL`: the project's API URL.
+- `SUPABASE_SECRET_KEY`: the Supabase secret key, stored only on the backend host.
+- `SUPABASE_STORAGE_BUCKET=analysis-images`
+- `CORS_ORIGINS`: include the Vercel frontend origin.
+
+Set `VITE_API_URL` in the Vercel frontend project to the deployed FastAPI base URL, then redeploy the frontend. Do not put the Supabase secret key in any `VITE_` variable. Supabase tables and the private `analysis-images` bucket are defined in `supabase/migrations/`.
+
+Training, dataset validation, and PyTorch image inference still run in the Python backend. The static frontend alone cannot perform screening until `VITE_API_URL` points to that backend.
 
 ### Optional: Streamlit screening interface
 
