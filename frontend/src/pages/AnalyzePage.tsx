@@ -219,32 +219,12 @@ export default function AnalyzePage() {
                   Model: {r.model_name || '—'} · Version: {r.model_version || '—'}
                 </div>
 
-                {r.warnings?.length > 0 && (
-                  <div className="alert alert-warning">
-                    <span className="alert-icon">⚠️</span>
-                    <ul className="result-warnings">
-                      {r.warnings.map((warning, index) => <li key={`${r.id}-warning-${index}`}>{warning}</li>)}
-                    </ul>
-                  </div>
-                )}
-
                 {/* Detections */}
                 {r.detection_count !== null && r.detection_count > 0 && (
                   <div className="badge badge-info">
                     {r.detection_count} particle(s) detected
                   </div>
                 )}
-
-                {/* Disclaimers */}
-                <div className="alert alert-info" style={{ marginTop: '8px' }}>
-                  <span className="alert-icon">ℹ️</span>
-                  <span className="text-xs">{r.confidence_note}</span>
-                </div>
-
-                <div className="alert alert-warning" style={{ marginTop: '4px' }}>
-                  <span className="alert-icon">⚠️</span>
-                  <span className="text-xs">{r.screening_disclaimer}</span>
-                </div>
 
               </div>
             </div>

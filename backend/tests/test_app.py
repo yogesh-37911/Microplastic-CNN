@@ -160,18 +160,27 @@ class TestInference:
         warnings = result.get("warnings", [])
         assert any("no trained model" in w.lower() for w in warnings)
 
-    def test_flat_digital_graphic_is_out_of_domain(self):
-        from app.ml.inference import InferenceService
-
-        img = Image.new("RGB", (256, 256), "black")
+    def test_sparse_dark_microscope_fibers_are_not_rejected_by_style(self):
+        from app.ml.preprocessing import assess_microscopy_domain
         from PIL import ImageDraw
-        draw = ImageDraw.Draw(img)
-        draw.rectangle((40, 40, 210, 210), fill="white")
-        result = InferenceService().predict(img)
 
-        assert result["status"] == "out_of_domain"
-        assert result["predicted_class"] is None
-        assert any("digital" in warning.lower() for warning in result["warnings"])
+        img = Image.new("RGB", (512, 512), (32, 32, 32))
+        draw = ImageDraw.Draw(img)
+        draw.line((20, 400, 260, 60), fill=(185, 185, 185), width=3)
+        draw.line((80, 20, 480, 300), fill=(120, 120, 120), width=2)
+        accepted, warnings = assess_microscopy_domain(img)
+
+        assert accepted is True
+        assert warnings == []
+
+    def test_domain_gate_still_rejects_low_resolution_and_blank_images(self):
+        from app.ml.preprocessing import assess_microscopy_domain
+
+        low_resolution = Image.new("RGB", (32, 32), (20, 20, 20))
+        blank = Image.new("RGB", (512, 512), (20, 20, 20))
+
+        assert assess_microscopy_domain(low_resolution)[0] is False
+        assert assess_microscopy_domain(blank)[0] is False
 
 
 # ── Dataset handling tests ──────────────────────────────────────

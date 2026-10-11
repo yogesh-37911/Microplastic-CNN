@@ -54,7 +54,7 @@ def validate_image(img: Image.Image) -> list[str]:
 
 
 def assess_microscopy_domain(img: Image.Image) -> tuple[bool, list[str]]:
-    """Flag low-quality inputs and report visual hints; heuristics cannot prove provenance."""
+    """Reject only inputs too small or too uniform to screen reliably."""
     img = ImageOps.exif_transpose(img).convert("RGB")
     original_width, original_height = img.size
     arr = np.asarray(img.resize((224, 224), Image.Resampling.LANCZOS), dtype=np.float32)
@@ -65,55 +65,11 @@ def assess_microscopy_domain(img: Image.Image) -> tuple[bool, list[str]]:
     if float(gray.std()) < 2.0:
         warnings.append("Image is nearly uniform or blank.")
 
-    # JPEG/PNG artwork often loses exact flat pixels during compression, so use
-    # local gradients as well as quantization. Thin, strong edges separated by
-    # smooth color fields are common in cartoons and poster graphics.
-    flat_fraction = float(np.mean(np.isclose(gray, np.rint(gray), atol=1e-6)))
-    gray_std = float(gray.std())
-    # Check overlapping, aspect-preserving tiles as well as the whole image so
-    # a poster with letterboxed margins cannot hide its illustrated content.
-    scale = min(1.0, 896 / max(original_width, original_height)) if min(original_width, original_height) >= 224 else 224 / min(original_width, original_height)
-    resized_size = (max(224, round(original_width * scale)), max(224, round(original_height * scale)))
-    tiled = img.resize(resized_size, Image.Resampling.LANCZOS)
-
-    def starts(length: int) -> list[int]:
-        positions = list(range(0, max(length - 224, 0) + 1, 112))
-        positions.append(max(length - 224, 0))
-        return sorted(set(positions))
-
-    vector_like = False
-    for top in starts(tiled.height):
-        for left in starts(tiled.width):
-            tile = np.asarray(tiled.crop((left, top, left + 224, top + 224)), dtype=np.float32)
-            tile_gray = tile.mean(axis=2)
-            gx = np.abs(np.diff(tile_gray, axis=1, prepend=tile_gray[:, :1]))
-            gy = np.abs(np.diff(tile_gray, axis=0, prepend=tile_gray[:1, :]))
-            tile_gradient = gx + gy
-            medium_edge_fraction = float(np.mean(tile_gradient > 16))
-            strong_edge_fraction = float(np.mean(tile_gradient > 32))
-            if (
-                float(tile_gray.std()) > 18
-                and medium_edge_fraction < 0.32
-                and strong_edge_fraction > 0.12
-            ):
-                vector_like = True
-                break
-        if vector_like:
-            break
-    if (gray_std > 8 and flat_fraction > 0.995) or vector_like:
-        warnings.append(
-            "The image style differs from the labeled microscope filter crops used for training. "
-            "The classifier cannot determine whether this image contains plastic."
-        )
-
-    # Darkfield optical images can be dark, so brightness alone is never used
-    # as a rejection criterion.
-    # This visual cue cannot establish that an image is not microscopy or lacks
-    # plastic. It only marks image styles outside this model's labeled scope.
+    # Darkfield microscope images can be very dark and contain sparse, sharp
+    # fibers. Do not infer image provenance from brightness, gradients, or style.
     out_of_domain = any(
         "too low" in warning
         or "uniform or blank" in warning
-        or "image style differs" in warning
         for warning in warnings
     )
     return not out_of_domain, warnings
