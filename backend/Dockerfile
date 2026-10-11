@@ -11,6 +11,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app/backend
 
+COPY render-requirements.txt ./render-requirements.txt
+
 # Install CPU-only PyTorch so the image does not pull CUDA libraries.
 RUN python -m pip install --upgrade pip && \
     python -m pip install --index-url https://download.pytorch.org/whl/cpu \
